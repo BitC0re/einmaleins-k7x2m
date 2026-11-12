@@ -1,0 +1,1093 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Einmaleins entdecken</title>
+<style>
+/* =====================================================================
+   GRUNDLAGEN
+   ===================================================================== */
+:root {
+  --ink: #1f2a37;
+  --paper: #f6f3ec;
+  --panel: #ffffff;
+  --felt: #70767e;
+  --felt-edge: #5d636b;
+  --accent: #0f6e6b;
+  --good: #1d7a4f;
+  --good-bg: #e3f4ea;
+  --info-bg: #fff4d6;
+  --focus: #ffbf00;
+  --card: 92px;                                   /* Kartengröße in der Materialablage */
+  --traycell: 28px;                               /* Einheitsfeld der Stäbe in der Ablage */
+}
+* { box-sizing: border-box; }
+html { -webkit-text-size-adjust: 100%; }
+body {
+  margin: 0;
+  font-family: "Atkinson Hyperlegible", Verdana, "Trebuchet MS", "Segoe UI", sans-serif;
+  font-size: 17px; line-height: 1.4; color: var(--ink); background: var(--paper);
+}
+h1, h2, h3, p { margin: 0; }
+button, select { font: inherit; color: inherit; }
+button { cursor: pointer; }
+:focus-visible { outline: 4px solid var(--focus); outline-offset: 2px; }
+.page { max-width: 1280px; margin: 0 auto; padding: 12px 16px 24px; }
+
+/* =====================================================================
+   KOPFBEREICH (kompakt)
+   ===================================================================== */
+.head { display: flex; flex-wrap: wrap; gap: 8px 20px; align-items: center; justify-content: space-between; margin-bottom: 10px; }
+.head h1 { font-size: 1.55rem; line-height: 1.15; }
+.head .sub { font-size: .95rem; color: #44505e; }
+.controls { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+.picker { border: 0; padding: 0; margin: 0; display: flex; align-items: center; gap: 6px; }
+.picker legend { float: left; padding: 0; margin-right: 6px; font-size: .9rem; font-weight: 700; color: #44505e; }
+.picker .dot { font-size: 1.4rem; font-weight: 700; }
+select, .btn {
+  min-height: 44px; min-width: 44px; padding: 6px 14px; border-radius: 12px;
+  border: 2px solid var(--ink); background: var(--panel); font-weight: 700;
+}
+.btn:hover { background: #eef6f6; }
+.btn[aria-pressed="true"], .btn.primary { background: var(--accent); color: #fff; border-color: var(--accent); }
+.btn:disabled { opacity: .5; cursor: default; }
+.settings-toggle { display: none; }
+
+.taskbar { display: flex; flex-wrap: wrap; gap: 8px 12px; align-items: stretch; margin-bottom: 10px; }
+.task { background: var(--panel); border: 2px solid var(--ink); border-radius: 12px; padding: 2px 14px; display: flex; align-items: center; gap: 10px; font-weight: 700; }
+.task .big { font-size: 1.6rem; white-space: nowrap; }
+.msg {
+  flex: 1 1 260px; min-height: 48px; display: flex; align-items: center; padding: 6px 14px; border-radius: 12px;
+  background: var(--info-bg); border: 2px solid #e6cf8a; font-weight: 600;
+}
+.msg.success { background: var(--good-bg); border-color: #9fd2b5; }
+.msg.hintmode { background: #e6f1f8; border: 2px dashed #86aecb; font-weight: 400; }
+.msg.select { background: #fff0b8; border-color: var(--focus); }
+.msg:empty { visibility: hidden; }
+
+/* =====================================================================
+   LAYOUT: STERN + MATERIALABLAGE
+   ===================================================================== */
+.work { display: grid; gap: 16px; grid-template-columns: minmax(0, 1fr); }
+.starcol { min-width: 0; }
+/* Ab Tablet-Breite liegt die Materialablage neben dem Stern – beides bleibt gleichzeitig sichtbar. */
+@media (min-width: 700px) {
+  :root {
+    --trayw: clamp(250px, 30vw, 340px);
+    --card: min(92px, calc((var(--trayw) - 48px) / 3));
+    --traycell: min(28px, calc((var(--trayw) - 34px) / 10));
+  }
+  .work { grid-template-columns: minmax(0, 1fr) var(--trayw); align-items: start; }
+}
+
+/* ---- Legestern ----
+   Alle Positionen im Stern sind in "Stern-Einheiten" (--u) angegeben:
+   Der Stern ist 900 × 1000 Einheiten groß – genau wie die viewBox des SVG-Hintergrunds.
+   --u wird per ResizeObserver gesetzt (Breite / 900). So passen Filz und Bedienelemente immer zusammen. */
+.star {
+  position: relative; --u: .6px; margin: 0 auto;
+  width: min(100%, max(320px, 64vh)); aspect-ratio: 9 / 10;
+  --pillh: max(18px, calc(var(--u) * 32));
+}
+@media (min-width: 700px) { .star { width: min(100%, max(320px, calc((100vh - 215px) * .9))); } }
+.star > svg { position: absolute; inset: 0; width: 100%; height: 100%; display: block; }
+.layer { position: absolute; inset: 0; }
+
+/* Kartenfelder an den Armenden */
+.zone { position: absolute; width: calc(var(--u) * 160); height: calc(var(--u) * 160); }
+.zone::before { content: ""; position: absolute; inset: calc(var(--u) * -14); }   /* großzügiger Treffbereich */
+.slot {
+  position: absolute; inset: 0; padding: 0; border-radius: calc(var(--u) * 14);
+  border: max(1.5px, calc(var(--u) * 3)) dashed rgba(255,255,255,.8); background: rgba(255,255,255,.07);
+}
+.zone.ready .slot { border-style: solid; border-color: var(--focus); background: rgba(255,255,255,.22); }
+.zone.drop-hover .slot { border-style: solid; border-color: #fff; background: rgba(255,255,255,.45); }
+.pill {
+  position: absolute; left: 50%; top: calc(var(--pillh) / -2); transform: translateX(-50%); z-index: 2;
+  height: var(--pillh); padding: 0 calc(var(--pillh) * .45); border-radius: 99px; white-space: nowrap;
+  display: flex; align-items: center; pointer-events: none;
+  background: #353a41; color: #fff; font-weight: 700; font-size: max(11px, calc(var(--u) * 20));
+}
+.zone.filled .pill { background: var(--good); }
+.pill .ck { margin-right: .3em; }
+.l-short { display: none; }
+.star.compact .l-long { display: none; }
+.star.compact .l-short { display: inline; }
+
+/* Mitte: Stäbe liegen direkt auf dem Filz */
+.center {
+  position: absolute; left: calc(var(--u) * 260); top: calc(var(--u) * 310);
+  width: calc(var(--u) * 380); height: calc(var(--u) * 380); --cell: calc(var(--u) * 38);
+}
+.lay { position: absolute; inset: 0; padding: 0; border: 0; background: none; border-radius: calc(var(--u) * 12); }
+.raster {                                   /* dezentes Einrastraster, nur während des Legens */
+  position: absolute; top: 0; height: 100%; opacity: 0; pointer-events: none; transition: opacity .15s;
+  background-image: linear-gradient(to right, rgba(255,255,255,.45) 1px, transparent 1px), linear-gradient(to bottom, rgba(255,255,255,.45) 1px, transparent 1px);
+  background-size: var(--cell) var(--cell);
+  border-right: 1px solid rgba(255,255,255,.45); border-bottom: 1px solid rgba(255,255,255,.45);
+}
+.center.ready .raster, .star.laying .raster { opacity: 1; }
+.center.ready .lay, .center.drop-hover .lay { outline: 3px dashed var(--focus); outline-offset: 2px; }
+.center .rod { position: absolute; transition: top .2s; }
+.rect-outline {
+  position: absolute; pointer-events: none; border: max(2px, calc(var(--u) * 5)) solid #fff; border-radius: calc(var(--u) * 9);
+  box-shadow: 0 0 0 max(1px, calc(var(--u) * 2)) var(--ink); animation: pop .45s ease;
+}
+@keyframes pop { from { transform: scale(1.08); opacity: 0; } to { transform: none; opacity: 1; } }
+
+.tauschbtn {
+  position: absolute; left: calc(var(--u) * 345); top: calc(var(--u) * 722); width: calc(var(--u) * 210);
+  min-height: 44px; padding: 4px 6px; border-radius: 12px; border: 2px solid #fff;
+  background: var(--accent); color: #fff; font-weight: 700; font-size: max(11px, calc(var(--u) * 22)); line-height: 1.2;
+  animation: pop .45s ease;
+}
+.star.compact .tauschbtn { left: calc(var(--u) * 337); width: calc(var(--u) * 226); padding: 3px 1px; }
+
+.rodbar { display: flex; flex-wrap: wrap; gap: 8px 12px; align-items: center; justify-content: center; margin-top: 6px; }
+.rodinfo { flex: 1 1 100%; text-align: center; font-weight: 600; min-height: 1.4em; }
+
+/* ---- Rechenstab ---- */
+.rod {
+  display: flex; padding: 0; width: calc(var(--cell) * var(--len)); height: var(--cell);
+  background: var(--rod); border: max(1.5px, calc(var(--cell) * .07)) solid rgba(0,0,0,.6); border-radius: calc(var(--cell) * .2);
+  touch-action: none; user-select: none; -webkit-user-select: none;
+}
+.rod .unit { flex: 1; border-right: max(1.5px, calc(var(--cell) * .07)) solid rgba(0,0,0,.5); }
+.rod .unit:last-child { border-right: 0; }
+.rod.selected { outline: 4px solid var(--focus); outline-offset: 3px; }
+
+/* ---- Karten: kleine Zuordnungskarten ---- */
+.card {
+  display: flex; align-items: center; justify-content: center; text-align: center;
+  padding: 6px; margin: 0; background: #fffdf8; color: var(--ink);
+  border: 1px solid #4d535b; border-radius: 8px; font-weight: 700; line-height: 1.25;
+  box-shadow: inset 0 0 0 4px var(--edge), 0 2px 3px rgba(0,0,0,.2);
+  user-select: none; -webkit-user-select: none;
+}
+.card .term { white-space: nowrap; }
+.card > span:not(.dotbox) { display: block; text-wrap: balance; }
+.card svg { display: block; width: 100%; height: 100%; }
+.card .dotbox { width: 82%; height: 82%; }
+
+/* Karten in der Ablage */
+.cards { display: grid; gap: 10px; grid-template-columns: repeat(auto-fill, var(--card)); grid-auto-rows: minmax(var(--card), auto); grid-auto-flow: dense; justify-content: start; }
+.cards .card { touch-action: none; min-width: 0; }
+.cards .card.wide { grid-column: span 2; }
+.cards .k-sprech { font-size: calc(var(--card) * .16); }
+.cards .k-mal { font-size: calc(var(--card) * .3); }
+.cards .k-ergebnis { font-size: calc(var(--card) * .36); }
+.cards .k-plus { font-size: calc(var(--card) * .19); }
+.cards .k-plus.wide { font-size: calc(var(--card) * .17); }
+.cards .card.selected { outline: 4px solid var(--focus); outline-offset: 2px; background: #fff3c4; }
+.cards .card.wiggle { animation: wiggle .5s ease; }
+@keyframes wiggle { 0%,100% { transform: none; } 25% { transform: translateX(-6px); } 60% { transform: translateX(5px); } }
+
+/* Karten auf dem Stern (skalieren mit dem Stern) */
+.card.on-star {
+  position: absolute; inset: 0; width: 100%; height: 100%;
+  padding: calc(var(--pillh) / 2 + var(--u) * 6) calc(var(--u) * 11) calc(var(--u) * 9);
+  border-radius: calc(var(--u) * 14); box-shadow: inset 0 0 0 max(2px, calc(var(--u) * 6)) var(--edge), 0 2px 3px rgba(0,0,0,.25);
+}
+.on-star.k-sprech { font-size: calc(var(--u) * 25); }
+.on-star.k-mal { font-size: calc(var(--u) * 42); }
+.on-star.k-ergebnis { font-size: calc(var(--u) * 50); }
+.on-star.k-plus.p-s { font-size: calc(var(--u) * 29); }
+.on-star.k-plus.p-m { font-size: calc(var(--u) * 24); }
+.on-star.k-plus.p-l { font-size: calc(var(--u) * 19); }
+.on-star .dotbox { width: 88%; height: 100%; }
+
+.drag-origin { opacity: .25; }
+.ghost { position: fixed !important; z-index: 1000; pointer-events: none; margin: 0; transform: none !important; box-shadow: 0 10px 22px rgba(0,0,0,.35); }
+.ghost.card { box-shadow: inset 0 0 0 4px var(--edge), 0 10px 22px rgba(0,0,0,.35); }
+
+/* ---- Materialablage ---- */
+.tray { background: var(--panel); border: 2px solid #cfc9bb; border-radius: 16px; padding: 12px; }
+.tray h2 { font-size: 1.1rem; }
+.tray h3 { font-size: .95rem; color: #44505e; margin: 10px 0 8px; }
+.supply { display: flex; flex-wrap: wrap; gap: 12px 18px; align-items: flex-end; --cell: var(--traycell); }
+.pile { display: flex; flex-direction: column; gap: 3px; align-items: flex-start; }
+.pile .cap { font-size: .88rem; font-weight: 600; color: #44505e; }
+.pile .rod { min-height: 0; }
+.pile .rodhit { --hit: calc(max(0px, 46px - var(--cell)) / 2); padding: var(--hit) 0; margin: calc(var(--hit) * -.6) 0; border: 0; background: none; touch-action: none; }   /* Treffhöhe ≥ 44 px */
+.pile .rod.stack { box-shadow: 3px 4px 0 -1px var(--rod), 3px 4px 0 .5px rgba(0,0,0,.55), 6px 8px 0 -1px var(--rod), 6px 8px 0 .5px rgba(0,0,0,.55); margin-bottom: 8px; }
+
+/* =====================================================================
+   DIALOGE: Kartendetail, vergrößerter Stern, Tauschaufgabe
+   ===================================================================== */
+dialog { border: 0; padding: 0; color: var(--ink); background: var(--paper); }
+dialog::backdrop { background: rgba(20,25,32,.6); }
+.dlg-small { border-radius: 18px; padding: 18px; max-width: min(92vw, 380px); text-align: center; }
+.dlg-small h2 { font-size: 1.15rem; margin-bottom: 12px; }
+.bigcard { width: min(72vw, 280px); min-height: min(72vw, 280px); margin: 0 auto 14px; padding: 18px; box-shadow: inset 0 0 0 8px var(--edge), 0 2px 4px rgba(0,0,0,.25); border-radius: 14px; }
+.bigcard.k-sprech { font-size: 2rem; } .bigcard.k-mal { font-size: 3.2rem; } .bigcard.k-ergebnis { font-size: 4rem; }
+.bigcard.k-plus { font-size: 1.7rem; } .bigcard.k-plus.p-l { font-size: 1.35rem; }
+.dlg-full { width: 100vw; height: 100vh; height: 100dvh; max-width: none; max-height: none; margin: 0; }
+.dlg-full[open] { display: flex; flex-direction: column; }
+.dlgbar { display: flex; gap: 10px; align-items: center; justify-content: space-between; padding: 8px 12px; background: var(--panel); border-bottom: 2px solid #cfc9bb; }
+.dlgbar h2 { font-size: 1.15rem; }
+.dlgbar .zoommsg { flex: 1; font-weight: 600; font-size: .95rem; }
+.zoomscroll { flex: 1; overflow: auto; padding: 16px; cursor: grab; }
+.zoomscroll .star { width: max(100%, 860px); max-width: 1100px; }
+.swapscroll { flex: 1; overflow: auto; padding: 16px; }
+.swapinner { max-width: 880px; margin: 0 auto; --cell: min(22px, calc((100vw - 96px) / 21)); }
+.swap-lead { font-size: 1.1rem; font-weight: 600; margin-bottom: 14px; }
+.compare { display: flex; flex-wrap: wrap; gap: 12px; margin-bottom: 18px; }
+.side { flex: 1 1 130px; background: var(--panel); border: 2px solid #cfc9bb; border-radius: 14px; padding: 12px; display: flex; flex-direction: column; gap: 6px; align-items: flex-start; min-width: 0; }
+.side .rods { display: flex; flex-direction: column; gap: 3px; margin-bottom: 4px; }
+.side .rod { cursor: default; }
+.side .s-mal { font-size: 1.5rem; font-weight: 700; }
+.side .s-plus { overflow-wrap: anywhere; }
+.side .s-plus .term { white-space: nowrap; }
+.turnbox { background: var(--panel); border: 3px solid var(--accent); border-radius: 16px; padding: 14px; display: flex; flex-wrap: wrap; gap: 12px 24px; align-items: center; }
+.turnbox h3 { flex: 1 1 100%; font-size: 1.1rem; }
+.turnstage { --cell: min(22px, calc((100vw - 110px) / 10 - 3px)); width: calc((var(--cell) + 3px) * var(--n) + 16px); height: calc((var(--cell) + 3px) * var(--n) + 16px); display: flex; align-items: center; justify-content: center; flex: 0 0 auto; }
+.field { display: grid; grid-template-columns: repeat(var(--cols), var(--cell)); gap: 3px; transition: transform .7s ease, gap .35s ease; }
+.field i { width: var(--cell); height: var(--cell); background: #f4f1e6; border: 1.5px solid rgba(0,0,0,.6); border-radius: 3px; transition: background .4s ease; }
+.field.grouped { column-gap: 0; row-gap: 6px; }
+.field.grouped i { background: var(--fill); border-radius: 0; }
+.field.turn { transform: rotate(90deg); }
+.field.notrans, .field.notrans i { transition: none; }
+.turntext { flex: 1 1 240px; display: flex; flex-direction: column; gap: 10px; align-items: flex-start; }
+.turntext .count { font-weight: 700; font-size: 1.15rem; }
+.turntext .cap { min-height: 4.2em; }
+.swap-note { margin-top: 14px; padding: 10px 14px; border-radius: 12px; background: #ebe6d8; }
+
+/* =====================================================================
+   TABLET HOCHFORMAT / HANDY: Stern bleibt Stern, Ablage direkt darunter
+   ===================================================================== */
+@media (max-width: 699px) {
+  .tray { border: 0; background: none; padding: 0; }
+}
+@media (max-width: 640px) {
+  :root { --card: min(92px, calc((100vw - 20px - 24px) / 4)); --traycell: min(26px, calc((100vw - 40px) / 10)); }
+  body { font-size: 16px; }
+  .page { padding: 8px 10px 20px; }
+  .head { gap: 6px 10px; margin-bottom: 8px; flex-wrap: nowrap; align-items: flex-start; }
+  .head { flex-wrap: wrap; }
+  .head h1 { font-size: 1.25rem; }
+  .head .sub { font-size: .82rem; }
+  .titles { flex: 1 1 0; min-width: 0; }
+  .settings-toggle { display: inline-block; padding: 6px 10px; font-size: .9rem; }
+  .controls { display: none; flex: 1 1 100%; }
+  .controls.open { display: flex; }
+  .task { padding: 2px 10px; font-size: .9rem; }
+  .task .big { font-size: 1.35rem; }
+  .msg { min-height: 44px; padding: 6px 10px; font-size: .95rem; }
+  .cards { gap: 8px; }
+  .star { width: min(100%, max(300px, 70vh)); }
+}
+@media (prefers-reduced-motion: reduce) {
+  * { animation: none !important; transition: none !important; }
+}
+</style>
+</head>
+<body>
+<div class="page">
+
+  <header class="head">
+    <div class="titles">
+      <h1>Einmaleins entdecken</h1>
+      <p class="sub">Lege gleiche Gruppen und finde die passenden Darstellungen.</p>
+    </div>
+    <button type="button" class="btn settings-toggle" data-action="toggleSettings" data-key="settings" id="btnSettings" aria-expanded="false" aria-controls="controls">Einstellungen</button>
+    <div class="controls" id="controls">
+      <fieldset class="picker">
+        <legend>Aufgabe wählen</legend>
+        <select id="selA" aria-label="Erste Zahl: Wie viele Stäbe?"></select>
+        <span class="dot" aria-hidden="true">·</span>
+        <select id="selB" aria-label="Zweite Zahl: Wie lang ist jeder Stab?"></select>
+      </fieldset>
+      <button type="button" class="btn" data-action="random" data-key="random">Zufallsaufgabe</button>
+      <button type="button" class="btn" data-action="hints" data-key="hints" id="btnHints" aria-pressed="true">Hinweise: an</button>
+      <button type="button" class="btn" data-action="restart" data-key="restart">Neustart</button>
+    </div>
+  </header>
+
+  <div class="taskbar">
+    <div class="task"><span>Aufgabe:</span> <span class="big" id="taskFace"></span></div>
+    <div class="msg" id="msg" role="status" aria-live="polite"></div>
+  </div>
+
+  <main class="work">
+    <div class="starcol">
+      <div id="starHome">
+        <section class="star" id="star" aria-label="Legestern">
+          <!-- Filz-Hintergrund: drei über Kreuz gelegte Streifen mit runden Enden (viewBox = Stern-Einheiten) -->
+          <svg viewBox="0 0 900 1000" aria-hidden="true" focusable="false">
+            <defs>
+              <filter id="feltTex" filterUnits="userSpaceOnUse" x="0" y="0" width="900" height="1000">
+                <feTurbulence type="fractalNoise" baseFrequency=".8" numOctaves="2" seed="7" result="n"/>
+                <feColorMatrix in="n" type="matrix" values="0 0 0 0 0  0 0 0 0 0  0 0 0 0 0  0 0 0 .22 -.04" result="g"/>
+                <feComposite in="g" in2="SourceAlpha" operator="in" result="t"/>
+                <feMerge><feMergeNode in="SourceGraphic"/><feMergeNode in="t"/></feMerge>
+              </filter>
+            </defs>
+            <g fill="none" stroke-linecap="round" filter="url(#feltTex)">
+              <g stroke="#5d636b" stroke-width="238">
+                <path d="M450 125V875"/><path d="M125.2 312.5L774.8 687.5"/><path d="M774.8 312.5L125.2 687.5"/>
+              </g>
+              <g stroke="#70767e" stroke-width="230">
+                <path d="M450 125V875"/><path d="M125.2 312.5L774.8 687.5"/><path d="M774.8 312.5L125.2 687.5"/>
+              </g>
+            </g>
+          </svg>
+          <div class="layer" id="layer"></div>
+        </section>
+      </div>
+      <div class="rodbar">
+        <p class="rodinfo" id="rodinfo" role="status" aria-live="polite"></p>
+        <button type="button" class="btn" data-action="addRod" data-key="addRod" id="btnAdd">+ Stab</button>
+        <button type="button" class="btn" data-action="removeRod" data-key="removeRod" aria-label="Einen Stab wegnehmen">− Stab</button>
+        <button type="button" class="btn" data-action="zoom" data-key="zoom">Stern vergrößern</button>
+      </div>
+    </div>
+    <aside class="tray" id="tray" aria-label="Material"></aside>
+  </main>
+</div>
+
+<dialog id="dlgCard" class="dlg-small" aria-labelledby="dlgCardTitle">
+  <h2 id="dlgCardTitle"></h2>
+  <div id="dlgCardBody"></div>
+  <button type="button" class="btn" data-action="closeDlg">Schließen</button>
+</dialog>
+
+<dialog id="dlgZoom" class="dlg-full" aria-labelledby="dlgZoomTitle">
+  <div class="dlgbar">
+    <h2 id="dlgZoomTitle">Stern</h2>
+    <span class="zoommsg" id="zoomMsg" role="status" aria-live="polite"></span>
+    <button type="button" class="btn" data-action="closeDlg">Schließen</button>
+  </div>
+  <div class="zoomscroll" id="zoomScroll"><div id="zoomHost"></div></div>
+</dialog>
+
+<dialog id="dlgSwap" class="dlg-full" aria-labelledby="dlgSwapTitle">
+  <div class="dlgbar">
+    <h2 id="dlgSwapTitle">Tauschaufgabe entdecken</h2>
+    <button type="button" class="btn" data-action="closeDlg">Schließen</button>
+  </div>
+  <div class="swapscroll"><div class="swapinner" id="swapBody"></div></div>
+</dialog>
+
+<script>
+'use strict';
+/* =====================================================================
+   1) KONFIGURATION
+   ===================================================================== */
+
+/* Zentrale Farbpalette: Stablänge -> Farbe.
+   4 (gelb), 5 (türkis) und 6 (violett) entsprechen dem Vorlagematerial;
+   die übrigen Farben sind eine frei gewählte, in sich einheitliche Ergänzung dieser App
+   und können hier angepasst werden. Farbe ist nie das einzige Merkmal:
+   Stäbe zeigen ihre Einheiten, Karten ihren Inhalt. */
+const PALETTE = {
+  1: '#f6efd9',  // creme
+  2: '#e4584d',  // rot
+  3: '#86c96a',  // grün
+  4: '#f4c81f',  // gelb
+  5: '#27b3ae',  // türkis
+  6: '#9a7fe0',  // violett
+  7: '#f08a3c',  // orange
+  8: '#ea8fc0',  // rosa
+  9: '#5b9be3',  // blau
+  10: '#b98a5e'  // braun
+};
+
+const NAMES = ['', 'Einer', 'Zweier', 'Dreier', 'Vierer', 'Fünfer', 'Sechser', 'Siebener', 'Achter', 'Neuner', 'Zehner'];
+
+/* Kartenfelder: Lage im Stern (Mittelpunkt in Stern-Einheiten, 900 × 1000).
+   oben: Sprechweise · oben rechts: Plus · unten rechts: Mal · unten links: Punkte · oben links: Ergebnis.
+   Der untere Arm bleibt frei (nur die Schaltfläche zur Tauschaufgabe). */
+const ZONES = [
+  { id: 'sprech',   label: 'Sprechweise', short: 'Sprache',  x: 450,   y: 138,   question: 'Welche Karte zeigt, wie man es spricht?',
+    hint: 'Schau auf deine Stäbe: Wie viele sind es? Und wie lang ist jeder?' },
+  { id: 'plus',     label: 'Plusaufgabe', short: 'Plus',     x: 763.5, y: 319,   question: 'Welche Karte zeigt die Plusaufgabe?',
+    hint: 'Jeder Stab ist eine Zahl in der Plusaufgabe. Wie viele Stäbe liegen da?' },
+  { id: 'mal',      label: 'Malaufgabe',  short: 'Mal',      x: 763.5, y: 681,   question: 'Welche Karte zeigt die Malaufgabe?',
+    hint: 'Die erste Zahl sagt, wie viele Stäbe es sind. Die zweite sagt, wie lang jeder ist.' },
+  { id: 'punkte',   label: 'Punktebild',  short: 'Punkte',   x: 136.5, y: 681,   question: 'Welche Karte zeigt das Punktebild?',
+    hint: 'Zähle die Reihen. Zähle dann die Punkte in einer Reihe.' },
+  { id: 'ergebnis', label: 'Ergebnis',    short: 'Ergebnis', x: 136.5, y: 319,   question: 'Welche Karte zeigt das Ergebnis?',
+    hint: 'Zähle alle Felder in deinem Rechteck.' }
+];
+const ZONE_BY_ID = Object.fromEntries(ZONES.map(z => [z.id, z]));
+
+const MAX_ROWS = 10;                 // höchstens 10 Stäbe in der Mitte
+const DISTRACTORS_PER_KIND = 2;      // Fehlkarten je Kartenart
+const STAR_UNITS = 900;              // Breite des Sterns in Stern-Einheiten
+const STORAGE_KEY = 'einmaleins-entdecken-v2';
+
+/* =====================================================================
+   2) DATENMODELL
+   ===================================================================== */
+
+/** Dauerhafter Zustand einer Aufgabe (wird gespeichert). */
+let state = null;
+/** Flüchtiger Zustand der Oberfläche (wird nicht gespeichert). */
+const ui = { selection: null, message: '', tone: 'info', wiggle: null, swapPhase: 0, swapBusy: false, swapToken: 0 };
+
+const plusText = (x, y) => Array(x).fill(y).join(' + ');
+const plural = (n, one, many) => (n === 1 ? one : many);
+
+/** "Gesicht" einer Karte: Zwei Karten mit gleichem Gesicht sehen gleich aus.
+    Geprüft wird immer Darstellungstyp UND Inhalt: Eine Karte passt nur, wenn ihr Gesicht
+    genau dem gesuchten Gesicht dieses Feldes für a · b entspricht. */
+function face(kind, x, y) {
+  switch (kind) {
+    case 'sprech':   return x + ' ' + NAMES[y];
+    case 'plus':     return plusText(x, y);
+    case 'mal':      return x + ' · ' + y;
+    case 'ergebnis': return String(x * y);
+    case 'punkte':   return 'P' + x + 'x' + y;
+  }
+}
+
+function shuffle(list) {
+  const a = list.slice();
+  for (let i = a.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [a[i], a[j]] = [a[j], a[i]];
+  }
+  return a;
+}
+
+/** Nachbaraufgaben aus derselben Zahlenwelt. Jede Fehlkarte ist eine korrekte Darstellung
+    einer dieser anderen Aufgaben – nie etwas mathematisch Falsches.
+    Die Tauschaufgabe steht (falls vorhanden) vorn, damit sie sicher vorkommt. */
+function neighbours(a, b) {
+  const minX = a === 1 ? 1 : 2;
+  const ok = ([x, y]) => x >= minX && x <= 10 && y >= 1 && y <= 10;
+  const rest = shuffle([[a + 1, b], [a - 1, b], [a, b + 1], [a, b - 1]].filter(ok));
+  return a !== b && ok([b, a]) ? [[b, a], ...rest] : rest;
+}
+
+/** Erzeugt alle Karten (richtige + Fehlkarten) gemischt. */
+function makeCards(a, b) {
+  const cards = [];
+  const used = new Set(ZONES.map(z => face(z.id, a, b)));   // richtige Gesichter sind tabu für Fehlkarten
+  let n = 0;
+  for (const z of ZONES) {
+    cards.push({ id: 'c' + n++, kind: z.id, x: a, y: b });
+    let added = 0;
+    for (const [x, y] of neighbours(a, b)) {
+      if (added >= DISTRACTORS_PER_KIND) break;
+      const f = face(z.id, x, y);
+      if (used.has(f)) continue;          // z. B. gleiches Ergebnis oder schon vorhanden
+      used.add(f);
+      cards.push({ id: 'c' + n++, kind: z.id, x, y });
+      added++;
+    }
+  }
+  return shuffle(cards);
+}
+
+function newState(a, b, hints) {
+  return {
+    a, b,
+    placed: 0,                                                 // Anzahl gelegter Stäbe
+    slots: Object.fromEntries(ZONES.map(z => [z.id, null])),   // Feld -> Karten-ID
+    cards: makeCards(a, b),
+    hints: hints !== false
+  };
+}
+
+const cardById = id => state.cards.find(c => c.id === id);
+const isCorrect = (card, zoneId) => face(card.kind, card.x, card.y) === face(zoneId, state.a, state.b);
+const allCardsPlaced = () => ZONES.every(z => state.slots[z.id]);
+const rodsRight = () => state.placed === state.a;
+const isDone = () => rodsRight() && allCardsPlaced();
+
+function save() {
+  try { localStorage.setItem(STORAGE_KEY, JSON.stringify(state)); } catch (e) { /* z. B. privater Modus */ }
+}
+function load() {
+  try {
+    const s = JSON.parse(localStorage.getItem(STORAGE_KEY));
+    const okNum = v => Number.isInteger(v) && v >= 1 && v <= 10;
+    if (!s || !okNum(s.a) || !okNum(s.b) || !Array.isArray(s.cards)) return null;
+    if (!Number.isInteger(s.placed) || s.placed < 0 || s.placed > MAX_ROWS) return null;
+    const kinds = new Set(ZONES.map(z => z.id));
+    if (!s.cards.every(c => c && typeof c.id === 'string' && kinds.has(c.kind) && okNum(c.x) && okNum(c.y))) return null;
+    const ids = new Set(s.cards.map(c => c.id));
+    const slots = {};
+    for (const z of ZONES) {
+      const id = s.slots ? s.slots[z.id] : null;
+      slots[z.id] = id && ids.has(id) ? id : null;
+    }
+    return { a: s.a, b: s.b, placed: s.placed, slots, cards: s.cards, hints: s.hints !== false };
+  } catch (e) { return null; }
+}
+
+/* =====================================================================
+   3) RENDERING
+   ===================================================================== */
+const $ = id => document.getElementById(id);
+
+/** Punktebild als SVG: rows Reihen, cols Spalten; nach 5 Punkten etwas Abstand zum leichteren Zählen.
+    Das SVG skaliert über seine viewBox – das Muster bleibt bei jeder Größe vollständig sichtbar. */
+function dotsSVG(rows, cols) {
+  const step = 12, r = 4.3, extra = 5, pad = 6;
+  const pos = i => pad + i * step + (i >= 5 ? extra : 0);
+  const w = pos(cols - 1) + pad, h = pos(rows - 1) + pad;
+  let c = '';
+  for (let i = 0; i < rows; i++) for (let j = 0; j < cols; j++) c += `<circle cx="${pos(j)}" cy="${pos(i)}" r="${r}"/>`;
+  return `<span class="dotbox"><svg viewBox="0 0 ${w} ${h}" fill="#1f2a37" aria-hidden="true" focusable="false">${c}</svg></span>`;
+}
+
+/** Plusaufgabe als einzelne Glieder, die nur an den Pluszeichen umbrechen. */
+function plusHTML(x, y) {
+  let h = '';
+  for (let i = 0; i < x; i++) h += `<span class="term">${y}${i < x - 1 ? ' +' : ''}</span> `;
+  return h;
+}
+
+function cardInner(card) {
+  if (card.kind === 'punkte') return dotsSVG(card.x, card.y);
+  if (card.kind === 'plus') return `<span>${plusHTML(card.x, card.y)}</span>`;
+  return face(card.kind, card.x, card.y);
+}
+function cardLabel(card) {
+  return card.kind === 'punkte'
+    ? `Karte mit Punktebild: ${card.x} ${plural(card.x, 'Reihe', 'Reihen')} mit je ${card.y} ${plural(card.y, 'Punkt', 'Punkten')}`
+    : `Karte: ${face(card.kind, card.x, card.y)}`;
+}
+function cardClass(card) {
+  let c = 'card k-' + card.kind;
+  if (card.kind === 'plus') {
+    const weight = card.x + (card.y === 10 ? 2 : 0);
+    c += weight <= 3 ? ' p-s' : weight <= 6 ? ' p-m' : ' p-l';
+    if (card.x >= 4) c += ' wide';
+  }
+  return c;
+}
+const edgeStyle = card => `--edge:${PALETTE[card.y]}`;   // farbiger Rand passend zur Stablänge
+
+/** Ein Rechenstab aus len sichtbar getrennten Einheitsfeldern. */
+function rodHTML(len, attrs, extraClass, style, tag) {
+  tag = tag || 'button';
+  return `<${tag}${tag === 'button' ? ' type="button"' : ''} class="rod ${extraClass || ''}" style="--len:${len};--rod:${PALETTE[len]};${style || ''}" ${attrs || ''}>` +
+         '<span class="unit"></span>'.repeat(len) + `</${tag}>`;
+}
+
+function rodInfoText() {
+  const { a, b, placed } = state;
+  if (placed === 0) return 'In der Mitte liegt noch kein Stab.';
+  let t = `Du hast ${placed} ${NAMES[b]} gelegt.`;
+  if (placed === a) t += ` Das ist ein Rechteck: ${a} ${plural(a, 'Reihe', 'Reihen')} mit je ${b} ${plural(b, 'Feld', 'Feldern')}.`;
+  return t;
+}
+
+function hintText() {
+  const { a, b, placed } = state;
+  if (isDone()) return 'Geschafft! Tippe unten im Stern auf „Tauschaufgabe entdecken“.';
+  if (placed === 0) return `Schritt 1: Lege ${NAMES[b]}-Stäbe in die Mitte vom Stern. Ziehe sie – oder tippe erst den Stab an und dann die Mitte.`;
+  if (placed !== a) return 'Schritt 1: Die erste Zahl der Aufgabe sagt dir, wie viele Stäbe du brauchst. Tippe einen Stab in der Mitte an, um ihn wegzunehmen.';
+  if (!allCardsPlaced()) return 'Schritt 2: Bringe jede passende Karte an ihr Armende. Achtung: Nicht alle Karten passen zu deinen Stäben!';
+  return '';
+}
+
+/** Interaktive Ebene des Sterns (liegt deckungsgleich über dem SVG-Filz). */
+function renderStar() {
+  const { a, b, placed, slots } = state;
+  const sel = ui.selection;
+  const cardSel = sel && sel.type === 'card', rodSel = sel && sel.type === 'rod';
+  const U = n => `calc(var(--u) * ${n})`, C = n => `calc(var(--cell) * ${n})`;
+  let html = '';
+
+  /* Mitte: Stäbe unmittelbar auf dem Filz, waagerecht mittig, in ganzen Rasterzeilen */
+  const col0 = (10 - b) / 2, row0 = Math.floor((10 - placed) / 2);
+  html += `<div class="center${rodSel ? ' ready' : ''}" data-drop="grid">`;
+  html += `<div class="raster" style="left:${C(col0)};width:${C(b)}"></div>`;
+  html += `<button type="button" class="lay" data-key="lay" aria-label="Mitte vom Stern. ${rodInfoText()} Ausgewählten Stab hier ablegen."></button>`;
+  for (let i = 0; i < placed; i++) {
+    html += rodHTML(b, `data-drag="rod" data-src="grid" data-len="${b}" data-key="placed-${i}" aria-label="${NAMES[b]}-Stab, Reihe ${i + 1}. Antippen zum Wegnehmen."`,
+                    '', `left:${C(col0)};top:${C(row0 + i)};`);
+  }
+  if (placed === a) {
+    html += `<div class="rect-outline" style="left:calc(${C(col0)} - ${U(7)});top:calc(${C(row0)} - ${U(7)});width:calc(${C(b)} + ${U(14)});height:calc(${C(a)} + ${U(14)})"></div>`;
+  }
+  html += '</div>';
+
+  /* Fünf Kartenfelder nahe den Armenden; Beschriftung und Karte bleiben waagerecht */
+  for (const z of ZONES) {
+    const card = slots[z.id] ? cardById(slots[z.id]) : null;
+    html += `<div class="zone${card ? ' filled' : ''}${cardSel && !card ? ' ready' : ''}" data-drop="zone" data-zone="${z.id}" style="left:${U(z.x - 80)};top:${U(z.y - 80)}">`;
+    html += `<span class="pill">${card ? '<span class="ck" aria-hidden="true">✓</span>' : ''}<span class="l-long">${z.label}</span><span class="l-short">${z.short}</span></span>`;
+    html += card
+      ? `<button type="button" class="${cardClass(card)} on-star" style="${edgeStyle(card)}" data-action="detail" data-id="${card.id}" data-key="oncard-${z.id}" aria-label="${z.label}: ${cardLabel(card)}, richtig zugeordnet. Antippen zum Vergrößern.">${cardInner(card)}</button>`
+      : `<button type="button" class="slot" data-key="slot-${z.id}" aria-label="Feld ${z.label}, noch leer. Ausgewählte Karte hier ablegen."></button>`;
+    html += '</div>';
+  }
+
+  /* Unterer Arm: frei – nach Abschluss nur die kleine Schaltfläche zur Tauschaufgabe */
+  if (isDone()) html += '<button type="button" class="tauschbtn" data-action="openSwap" data-key="openSwap">Tausch&shy;aufgabe entdecken</button>';
+
+  $('layer').innerHTML = html;
+  $('rodinfo').textContent = rodInfoText();
+  $('btnAdd').setAttribute('aria-label', `Einen ${NAMES[b]}-Stab dazulegen`);
+}
+
+function renderTray() {
+  const { b, placed, slots } = state;
+  const sel = ui.selection;
+  const left = MAX_ROWS - placed;
+  let html = '<h2>Material</h2><section><h3>Stäbe</h3><div class="supply">';
+
+  /* Vorrat der passenden Stäbe + zwei andere Längen zum Vergleichen */
+  for (const len of [b, b - 1, b + 1].filter(l => l >= 1 && l <= 10)) {
+    const isMain = len === b;
+    const selected = !!(sel && sel.type === 'rod' && sel.len === len);
+    html += '<div class="pile">';
+    if (isMain && left === 0) {
+      html += `<span class="cap">Alle ${NAMES[len]}-Stäbe liegen im Stern.</span>`;
+    } else {
+      /* Hülle vergrößert die Treffhöhe; der Stab selbst behält seine echte Form */
+      html += `<button type="button" class="rodhit" data-drag="rod" data-src="supply" data-len="${len}" data-key="supply-${len}" aria-pressed="${selected}" aria-label="${NAMES[len]}-Stab mit ${len} ${plural(len, 'Feld', 'Feldern')} auswählen">` +
+              rodHTML(len, '', (isMain && left > 2 ? 'stack ' : '') + (selected ? 'selected' : ''), '', 'span') + '</button>';
+      html += `<span class="cap">${NAMES[len]}-${isMain ? `Stäbe (noch ${left})` : 'Stab'}</span>`;
+    }
+    html += '</div>';
+  }
+  html += '</div></section><section><h3>Karten</h3><div class="cards">';
+
+  const placedIds = new Set(Object.values(slots).filter(Boolean));
+  const open = state.cards.filter(c => !placedIds.has(c.id));
+  for (const card of open) {
+    const selected = !!(sel && sel.type === 'card' && sel.id === card.id);
+    html += `<button type="button" class="${cardClass(card)}${selected ? ' selected' : ''}${ui.wiggle === card.id ? ' wiggle' : ''}" style="${edgeStyle(card)}" data-drag="card" data-id="${card.id}" data-key="card-${card.id}" aria-pressed="${selected}" aria-label="${cardLabel(card)}">${cardInner(card)}</button>`;
+  }
+  html += '</div>';
+  if (!open.length) html += '<p>Alle Karten sind verteilt.</p>';
+  html += '</section>';
+  $('tray').innerHTML = html;
+  ui.wiggle = null;
+}
+
+/* ---- Tauschaufgabe: eigene Vergleichsansicht ---- */
+function sideHTML(x, y) {
+  let rods = '';
+  for (let i = 0; i < x; i++) rods += rodHTML(y, '', '', '', 'div');
+  return `<div class="side">
+      <div class="rods" role="img" aria-label="${x} ${NAMES[y]}-${plural(x, 'Stab', 'Stäbe')}">${rods}</div>
+      <span class="s-mal">${x} · ${y} = ${x * y}</span>
+      <span>Man spricht: <b>${x} ${NAMES[y]}</b></span>
+      <span class="s-plus">${x === 1 ? y : plusHTML(x, y)} = ${x * y}</span>
+    </div>`;
+}
+
+/** Einheitenfeld für die Drehung. grouped = Reihen als farbige Stäbe, sonst einzelne neutrale Felder. */
+function fieldHTML(rows, cols, grouped, extra) {
+  return `<div class="field ${grouped ? 'grouped' : 'units'} ${extra || ''}" id="field" style="--cols:${cols};--fill:${PALETTE[cols]}" role="img" aria-label="${rows * cols} Felder: ${rows} ${plural(rows, 'Reihe', 'Reihen')} mit je ${cols}">` +
+         '<i></i>'.repeat(rows * cols) + '</div>';
+}
+const turnDims = () => (ui.swapPhase === 0 ? [state.a, state.b] : [state.b, state.a]);
+function turnCaption(step, r, c) {
+  const p = r * c;
+  switch (step) {
+    case 0: return `${r} ${NAMES[c]}: ${r} ${plural(r, 'Reihe', 'Reihen')} mit je ${c} ${plural(c, 'Feld', 'Feldern')}.`;
+    case 1: return `Jetzt siehst du ${p} einzelne Felder. Noch liegen sie in ${r} ${plural(r, 'Reihe', 'Reihen')} mit je ${c}.`;
+    case 2: return 'Das Feld dreht sich. Kein Feld kommt dazu, keines geht weg.';
+    case 3: return `Es sind immer noch ${p} Felder – jetzt in ${r} ${plural(r, 'Reihe', 'Reihen')} mit je ${c}.`;
+    case 4: return `Neu gruppiert: ${r} ${NAMES[c]}. ${r} · ${c} = ${p}.`;
+  }
+}
+
+function renderSwap() {
+  const { a, b } = state, p = a * b;
+  const [r, c] = turnDims();
+  let lead, note;
+  if (a === b) {
+    lead = `${a} · ${b} ist eine besondere Aufgabe: Das Rechteck ist ein Quadrat. Wenn du es drehst, sieht es genauso aus.`;
+    note = `Bei ${a} · ${b} ist die Tauschaufgabe dieselbe Aufgabe. Es bleiben <b>${a} ${NAMES[b]}</b> und das Ergebnis <b>${p}</b>.`;
+  } else {
+    lead = `${a} · ${b} und ${b} · ${a} haben beide ${p}. Die Gruppen sehen anders aus, aber die Gesamtzahl bleibt gleich.`;
+    note = `<b>Gleich</b> ist das Ergebnis: ${p}. <b>Verschieden</b> sind die Sprechweise und die Gruppen: ` +
+           `<b>${a} ${NAMES[b]}</b> sind ${a} ${plural(a, 'Gruppe', 'Gruppen')} mit je ${b}. <b>${b} ${NAMES[a]}</b> sind ${b} ${plural(b, 'Gruppe', 'Gruppen')} mit je ${a}.`;
+  }
+  $('swapBody').innerHTML = `
+    <p class="swap-lead">${lead}</p>
+    <div class="compare">${sideHTML(a, b)}${a !== b ? sideHTML(b, a) : ''}</div>
+    <div class="turnbox">
+      <h3>So entsteht die Tauschaufgabe</h3>
+      <div class="turnstage" style="--n:${Math.max(a, b)}">${fieldHTML(r, c, true)}</div>
+      <div class="turntext">
+        <span class="count">Immer ${p} Felder</span>
+        <p class="cap" id="turnCap" role="status" aria-live="polite">${turnCaption(0, r, c)}</p>
+        <button type="button" class="btn primary" data-action="turn" data-key="turn" id="btnTurn">${ui.swapPhase === 0 ? 'Feld drehen' : 'Zurückdrehen'}</button>
+      </div>
+    </div>
+    <p class="swap-note">${note}</p>`;
+}
+
+/** Ablauf: Stäbe -> einzelne Felder -> Drehung -> neue Reihen -> neue Stäbe.
+    Die Felder bleiben die ganze Zeit sichtbar; erst nach der Drehung wird neu gruppiert. */
+async function runTurn() {
+  if (ui.swapBusy) return;
+  const token = ++ui.swapToken;
+  const reduce = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+  const wait = ms => new Promise(res => setTimeout(res, reduce ? 0 : ms));
+  const alive = () => token === ui.swapToken && $('dlgSwap').open;
+  const cap = t => { const el = $('turnCap'); if (el) el.textContent = t; };
+  const [r, c] = turnDims();
+  ui.swapBusy = true; $('btnTurn').disabled = true;
+
+  $('field').classList.replace('grouped', 'units'); cap(turnCaption(1, r, c));
+  await wait(1100); if (!alive()) return (ui.swapBusy = false);
+  $('field').classList.add('turn'); cap(turnCaption(2, r, c));
+  await wait(1300); if (!alive()) return (ui.swapBusy = false);
+  ui.swapPhase = 1 - ui.swapPhase;                      // gedrehtes Feld = c Reihen mit je r Feldern
+  $('field').outerHTML = fieldHTML(c, r, false, 'notrans');
+  cap(turnCaption(3, c, r));
+  await wait(1300); if (!alive()) return (ui.swapBusy = false);
+  const f = $('field'); f.classList.remove('notrans'); void f.offsetWidth; f.classList.replace('units', 'grouped');
+  cap(turnCaption(4, c, r));
+  ui.swapBusy = false;
+  const btn = $('btnTurn'); btn.disabled = false; btn.textContent = ui.swapPhase === 0 ? 'Feld drehen' : 'Zurückdrehen';
+}
+
+function renderChrome() {
+  const { a, b, hints } = state;
+  $('taskFace').textContent = `${a} · ${b}`;
+  $('selA').value = a; $('selB').value = b;
+  const bh = $('btnHints');
+  bh.setAttribute('aria-pressed', String(hints));
+  bh.textContent = 'Hinweise: ' + (hints ? 'an' : 'aus');
+  /* Eine gemeinsame Zeile: Rückmeldung – oder, wenn keine da ist, der nächste Schritt als Hinweis */
+  const m = $('msg');
+  const text = ui.message || (hints ? hintText() : '');
+  if (m.textContent !== text) m.textContent = text;
+  m.className = 'msg' + (ui.message ? (ui.tone === 'info' ? '' : ' ' + ui.tone) : ' hintmode');
+  $('zoomMsg').textContent = ui.message;
+}
+
+/** Zeichnet alles neu und erhält dabei den Tastaturfokus. */
+function render() {
+  const active = document.activeElement;
+  const key = active && active.dataset ? active.dataset.key : null;
+  renderChrome(); renderStar(); renderTray();
+  if (key) { const el = document.querySelector(`[data-key="${key}"]`); if (el) el.focus({ preventScroll: true }); }
+  save();
+}
+
+/* Stern-Einheit an die tatsächliche Größe koppeln (Hintergrund und Bedienelemente bleiben deckungsgleich). */
+function syncStarUnit() {
+  const star = $('star'), w = star.clientWidth;
+  if (!w) return;
+  star.style.setProperty('--u', (w / STAR_UNITS) + 'px');
+  star.classList.toggle('compact', w < 560);          // schmale Sterne: kurze Feldtitel
+}
+if ('ResizeObserver' in window) new ResizeObserver(syncStarUnit).observe($('star'));
+window.addEventListener('resize', syncStarUnit);
+
+/* =====================================================================
+   4) INTERAKTIONSLOGIK
+   ===================================================================== */
+function say(text, tone) { ui.message = text; ui.tone = tone || 'info'; }
+
+function successText() {
+  const { a, b } = state;
+  return a === 1
+    ? `Klasse! 1 ${NAMES[b]} ist ${b}, also 1 · ${b} = ${b}.`
+    : `Klasse! ${a} ${NAMES[b]} sind ${plusText(a, b)}, also ${a} · ${b} = ${a * b}.`;
+}
+
+function checkDone() {
+  if (isDone()) say(successText(), 'success');
+  else if (allCardsPlaced()) say('Alle Karten liegen richtig. Schau jetzt noch einmal auf deine Stäbe: Passen sie zur Aufgabe?');
+}
+
+function startTask(a, b) {
+  state = newState(a, b, state ? state.hints : true);
+  ui.selection = null; ui.swapPhase = 0; say('');
+  render();
+}
+
+/** Stab in die Mitte legen. Gibt true zurück, wenn er liegen bleibt. */
+function tryPlaceRod(len) {
+  const { b } = state;
+  if (len !== b) { say(`Das ist ein ${NAMES[len]}-Stab. In die Mitte passen gerade nur ${NAMES[b]}-Stäbe.`); return false; }
+  if (state.placed >= MAX_ROWS) { say('Die Mitte ist voll.'); return false; }
+  state.placed++;
+  say('');
+  checkDone();
+  return true;
+}
+
+function removeRod() {
+  if (state.placed === 0) return;
+  state.placed--;
+  say('');
+  checkDone();
+}
+
+/** Karte in ein Feld legen. Gibt true zurück, wenn sie einrastet.
+    Geprüft werden Darstellungstyp und Inhalt (siehe face/isCorrect). */
+function tryPlaceCard(cardId, zoneId) {
+  const card = cardById(cardId), zone = ZONE_BY_ID[zoneId];
+  const { a, b } = state;
+  if (!card || !zone) return false;
+  if (state.slots[zoneId]) { say('In diesem Feld liegt schon die passende Karte.'); return false; }
+  if (isCorrect(card, zoneId)) {
+    state.slots[zoneId] = cardId;
+    say(`Passt! Die Karte liegt im Feld „${zone.label}“.`, 'success');
+    checkDone();
+    return true;
+  }
+  ui.wiggle = cardId;
+  if (card.kind !== zoneId) {
+    say(`Schau noch einmal: ${zone.question}`);                       // falscher Darstellungstyp
+  } else if (card.x * card.y === a * b) {
+    say(`Die Gesamtzahl stimmt. Hier suchen wir aber ${a} ${NAMES[b]}.`);   // Tauschaufgabe: nicht falsch, aber andere Gruppen
+  } else {
+    say(state.hints ? `Schau noch einmal genau hin. ${zone.hint}` : 'Schau noch einmal genau hin: Passt diese Karte zu deinen Stäben?');
+  }
+  return false;
+}
+
+/* ---- Weg B: antippen/Enter, dann Ziel antippen/Enter ---- */
+let suppressClick = false;
+
+function select(sel, text) {
+  const cur = ui.selection;
+  const same = cur && sel && cur.type === sel.type && cur.id === sel.id && cur.len === sel.len;
+  ui.selection = same ? null : sel;
+  say(same ? '' : text, 'select');
+  if (!same && !$('dlgZoom').open) {                    // Stern ins Bild holen, falls er weggescrollt ist
+    const r = $('star').getBoundingClientRect();
+    if (r.top < 0 || r.bottom > window.innerHeight) $('star').scrollIntoView({ block: 'nearest', behavior: 'smooth' });
+  }
+}
+
+function openCardDetail(cardId) {
+  const card = cardById(cardId);
+  if (!card) return;
+  $('dlgCardTitle').textContent = ZONE_BY_ID[card.kind].label;
+  $('dlgCardBody').innerHTML = `<div class="${cardClass(card)} bigcard" style="${edgeStyle(card)}" role="img" aria-label="${cardLabel(card)}">${cardInner(card)}</div>`;
+  $('dlgCard').showModal();
+}
+
+const ACTIONS = {
+  random() {
+    let a, b;
+    do { a = 2 + Math.floor(Math.random() * 9); b = 2 + Math.floor(Math.random() * 9); }
+    while (a === state.a && b === state.b);
+    startTask(a, b);
+  },
+  restart() { startTask(state.a, state.b); },
+  hints() { state.hints = !state.hints; render(); },
+  toggleSettings() {
+    const open = $('controls').classList.toggle('open');
+    $('btnSettings').setAttribute('aria-expanded', String(open));
+  },
+  addRod() { ui.selection = null; tryPlaceRod(state.b); render(); },
+  removeRod() { ui.selection = null; removeRod(); render(); },
+  detail(el) { openCardDetail(el.dataset.id); },
+  zoom() {
+    const star = $('star'), home = $('starHome');
+    home.style.height = star.offsetHeight + 'px';       // Platz freihalten, damit die Seite nicht springt
+    $('zoomHost').appendChild(star);
+    $('dlgZoom').showModal();
+    syncStarUnit();
+    const sc = $('zoomScroll');
+    sc.scrollLeft = (sc.scrollWidth - sc.clientWidth) / 2;
+    sc.scrollTop = (sc.scrollHeight - sc.clientHeight) / 2;
+  },
+  openSwap() { ui.swapPhase = 0; ui.swapBusy = false; ui.swapToken++; renderSwap(); $('dlgSwap').showModal(); },
+  turn() { runTurn(); },
+  closeDlg(el) { el.closest('dialog').close(); }
+};
+
+$('dlgZoom').addEventListener('close', () => {
+  $('starHome').appendChild($('star'));
+  $('starHome').style.height = '';
+  syncStarUnit();
+});
+$('dlgSwap').addEventListener('close', () => { ui.swapToken++; ui.swapBusy = false; });
+
+document.addEventListener('click', e => {
+  if (suppressClick) { e.preventDefault(); e.stopPropagation(); return; }
+  const t = e.target;
+  if (!(t instanceof Element)) return;
+  if (t instanceof HTMLDialogElement && t.classList.contains('dlg-small')) { t.close(); return; }   // Klick neben die Karte
+
+  const sel = ui.selection;
+  const actionEl = t.closest('[data-action]');
+  /* Liegt schon eine Karte im Feld und es ist Material ausgewählt, zählt der Tipp als Zielwahl (nicht als Detailansicht). */
+  if (actionEl && !(actionEl.dataset.action === 'detail' && sel)) { ACTIONS[actionEl.dataset.action](actionEl); return; }
+
+  const dragEl = t.closest('[data-drag]');
+  if (dragEl) {
+    if (dragEl.dataset.drag === 'card') {
+      select({ type: 'card', id: dragEl.dataset.id }, 'Tippe jetzt auf das passende Feld.');
+    } else if (dragEl.dataset.src === 'grid') {
+      if (sel && sel.type === 'rod') tryPlaceRod(sel.len); else removeRod();
+      ui.selection = null;
+    } else {
+      select({ type: 'rod', len: Number(dragEl.dataset.len) }, 'Tippe jetzt auf die Mitte vom Stern.');
+    }
+    render(); return;
+  }
+
+  const zoneEl = t.closest('[data-drop="zone"]');
+  if (zoneEl) {
+    if (sel && sel.type === 'card') { tryPlaceCard(sel.id, zoneEl.dataset.zone); ui.selection = null; }
+    else if (!state.slots[zoneEl.dataset.zone]) say('Wähle zuerst eine Karte aus dem Material aus.');
+    render(); return;
+  }
+
+  if (t.closest('[data-drop="grid"]')) {
+    if (sel && sel.type === 'rod') { tryPlaceRod(sel.len); ui.selection = null; }
+    else if (!sel) say(`Wähle zuerst einen Stab aus dem Material aus – oder tippe auf „+ Stab“.`);
+    render();
+  }
+}, true);
+
+document.addEventListener('keydown', e => {
+  if (e.key === 'Escape' && ui.selection) {            // Auswahl abbrechen
+    e.preventDefault();
+    ui.selection = null; say(''); render();
+  }
+});
+
+/* ---- Weg A: Ziehen mit Pointer Events (Maus, Finger, Stift) ---- */
+let drag = null;
+const DRAG_THRESHOLD = 8;        // px Bewegung, bevor das Ziehen beginnt
+const TOUCH_LIFT = 26;           // px Abstand der Vorschau über dem Finger
+
+function dropTargetAt(x, y) {
+  const el = document.elementFromPoint(x, y);
+  return el ? el.closest('[data-drop]') : null;
+}
+function clearHover() {
+  document.querySelectorAll('.drop-hover').forEach(el => el.classList.remove('drop-hover'));
+}
+/** Position der Vorschau und der Punkt, der über das Ziel entscheidet (immer in Viewport-Koordinaten,
+    daher unabhängig von Skalierung, Scrollposition und vergrößerter Ansicht). */
+function ghostPlace(d, x, y) {
+  let gx, gy, hx, hy;
+  if (d.touch) {                                        // Finger/Stift: Vorschau über dem Finger, ihre Mitte zählt
+    gx = x - d.w / 2; gy = y - d.h - TOUCH_LIFT; hx = x; hy = gy + d.h / 2;
+  } else {                                              // Maus: Vorschau bleibt am Griffpunkt, der Zeiger zählt
+    gx = x - d.gripX; gy = y - d.gripY; hx = x; hy = y;
+  }
+  d.ghost.style.left = gx + 'px'; d.ghost.style.top = gy + 'px';
+  d.hx = hx; d.hy = hy;
+}
+
+function beginDrag() {
+  const d = drag, el = d.el;
+  const visual = el.classList.contains('rodhit') ? el.firstElementChild : el;   // beim Stab die echte Form zeigen
+  const r = visual.getBoundingClientRect();
+  const ghost = visual.cloneNode(true);
+  ghost.classList.add('ghost');
+  ghost.classList.remove('selected', 'stack', 'wiggle');
+  ['data-key', 'data-drag', 'data-action'].forEach(a => ghost.removeAttribute(a));
+  Object.assign(ghost.style, { width: r.width + 'px', height: r.height + 'px' });
+  ghost.style.setProperty('--cell', getComputedStyle(visual).getPropertyValue('--cell'));
+  /* Im geöffneten Dialog muss die Vorschau im Dialog liegen (oberste Ebene) */
+  (document.querySelector('dialog[open]') || document.body).appendChild(ghost);
+  el.classList.add('drag-origin');
+  Object.assign(d, { ghost, active: true, w: r.width, h: r.height, gripX: d.x0 - r.left, gripY: d.y0 - r.top });
+  if (el.dataset.drag === 'rod') $('star').classList.add('laying');     // Einrastraster zeigen
+  ui.selection = null;
+  autoScroll();
+}
+
+/** Mitscrollen, wenn am oberen/unteren Rand gezogen wird (Seite oder vergrößerte Ansicht). */
+function autoScroll() {
+  if (!drag || !drag.active) return;
+  const edge = 64, sc = $('dlgZoom').open ? $('zoomScroll') : window;
+  if (drag.y < edge) sc.scrollBy(0, -10);
+  else if (drag.y > window.innerHeight - edge) sc.scrollBy(0, 10);
+  requestAnimationFrame(autoScroll);
+}
+
+function endDrag(cancelled) {
+  const d = drag; drag = null;
+  if (!d || !d.active) return;
+  clearHover();
+  $('star').classList.remove('laying');
+  suppressClick = true; setTimeout(() => { suppressClick = false; }, 0);
+
+  const target = cancelled ? null : dropTargetAt(d.hx, d.hy);
+  const kind = d.el.dataset.drag;
+  let ok = false;
+  if (kind === 'card') {
+    if (target && target.dataset.drop === 'zone') ok = tryPlaceCard(d.el.dataset.id, target.dataset.zone);
+  } else if (d.el.dataset.src === 'supply') {
+    if (target && target.dataset.drop === 'grid') ok = tryPlaceRod(Number(d.el.dataset.len));
+  } else {
+    /* Stab aus der Mitte: außerhalb loslassen = zurück in den Vorrat */
+    if (!cancelled && !(target && target.dataset.drop === 'grid')) { removeRod(); ok = true; }
+  }
+
+  if (ok) { d.ghost.remove(); render(); return; }
+  /* Nichts geht verloren: Vorschau gleitet an den Ausgangsort zurück, das Original bleibt, wo es war. */
+  const visual = d.el.classList.contains('rodhit') ? d.el.firstElementChild : d.el;
+  const r = visual.getBoundingClientRect();
+  d.ghost.style.transition = 'left .25s ease, top .25s ease';
+  d.ghost.style.left = r.left + 'px'; d.ghost.style.top = r.top + 'px';
+  setTimeout(() => { d.ghost.remove(); render(); }, 260);
+}
+
+document.addEventListener('pointerdown', e => {
+  if (drag || (e.pointerType === 'mouse' && e.button !== 0)) return;
+  const el = e.target instanceof Element ? e.target.closest('[data-drag]') : null;
+  if (!el) return;
+  if (e.target.hasPointerCapture && e.target.hasPointerCapture(e.pointerId)) e.target.releasePointerCapture(e.pointerId);
+  drag = { el, id: e.pointerId, touch: e.pointerType !== 'mouse', x0: e.clientX, y0: e.clientY, x: e.clientX, y: e.clientY, active: false, ghost: null };
+});
+window.addEventListener('pointermove', e => {
+  if (!drag || e.pointerId !== drag.id) return;
+  drag.x = e.clientX; drag.y = e.clientY;
+  if (!drag.active) {
+    if (Math.hypot(e.clientX - drag.x0, e.clientY - drag.y0) < DRAG_THRESHOLD) return;
+    beginDrag();
+  }
+  e.preventDefault();
+  ghostPlace(drag, e.clientX, e.clientY);
+  clearHover();
+  const target = dropTargetAt(drag.hx, drag.hy);
+  const wants = drag.el.dataset.drag === 'card' ? 'zone' : 'grid';
+  if (target && target.dataset.drop === wants) target.classList.add('drop-hover');   // nur gültige Ziele hervorheben
+}, { passive: false });
+window.addEventListener('pointerup', e => { if (drag && e.pointerId === drag.id) endDrag(false); });
+window.addEventListener('pointercancel', e => { if (drag && e.pointerId === drag.id) endDrag(true); });
+document.addEventListener('dragstart', e => e.preventDefault());
+
+/* ---- Vergrößerte Ansicht mit der Maus verschieben (Finger verschieben über normales Scrollen) ---- */
+(function initPan() {
+  const sc = $('zoomScroll');
+  let pan = null;
+  sc.addEventListener('pointerdown', e => {
+    if (e.pointerType !== 'mouse' || e.button !== 0 || e.target.closest('button')) return;
+    pan = { x: e.clientX, y: e.clientY, l: sc.scrollLeft, t: sc.scrollTop };
+    sc.setPointerCapture(e.pointerId);
+  });
+  sc.addEventListener('pointermove', e => {
+    if (!pan) return;
+    sc.scrollLeft = pan.l - (e.clientX - pan.x); sc.scrollTop = pan.t - (e.clientY - pan.y);
+  });
+  const stop = () => { pan = null; };
+  sc.addEventListener('pointerup', stop); sc.addEventListener('pointercancel', stop);
+})();
+
+/* ---- Aufgabenwahl im Kopfbereich ---- */
+function initPickers() {
+  for (const sel of [$('selA'), $('selB')]) {
+    for (let i = 1; i <= 10; i++) sel.add(new Option(String(i), String(i)));
+    sel.addEventListener('change', () => startTask(Number($('selA').value), Number($('selB').value)));
+  }
+}
+
+/* =====================================================================
+   5) START
+   ===================================================================== */
+initPickers();
+state = load() || newState(4, 5, true);    // Standard beim ersten Start: 4 · 5, Mitte leer
+if (isDone()) say(successText(), 'success');
+syncStarUnit();
+render();
+</script>
+</body>
+</html>
